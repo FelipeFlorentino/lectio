@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Livro aberto com uma cruz, centralizado na zona segura de 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cruz -->
+    <path android:fillColor="#F3E3C3" android:pathData="M51.5,26h5v10h7v5h-7v8h-5v-8h-7v-5h7z" />
+    <!-- Página esquerda -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M32,56c7,-3 15,-3 21,1v26c-6,-4 -14,-4 -21,-1z" />
+    <!-- Página direita -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M76,56c-7,-3 -15,-3 -21,1v26c6,-4 14,-4 21,-1z" />
+</vector>
