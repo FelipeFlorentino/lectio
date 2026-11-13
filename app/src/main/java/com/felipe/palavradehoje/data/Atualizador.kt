@@ -3,15 +3,12 @@ package com.felipe.palavradehoje.data
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.Settings
-import androidx.core.content.FileProvider
 import com.felipe.palavradehoje.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
-import java.io.File
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -25,13 +22,14 @@ data class NovaVersao(
 /**
  * Atualização pelo GitHub Releases: cada versão publicada traz um anexo
  * "Lectio-<versionCode>.apk", assinado com a mesma chave do app.
+ *
+ * O app só avisa e abre o download no navegador. Ele não baixa nem instala APKs
+ * sozinho: o Play Protect bloqueia como nocivo um app de fora da loja que faz isso.
  */
-class Atualizador(context: Context) {
-    private val app = context.applicationContext
-    private val pasta = File(app.cacheDir, "atualizacao")
+class Atualizador {
     private val http = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
     /** Devolve a versão publicada se ela for mais nova que a instalada. */
@@ -62,47 +60,8 @@ class Atualizador(context: Context) {
         null
     }
 
-    suspend fun baixar(versao: NovaVersao, progresso: (Float) -> Unit): File = withContext(Dispatchers.IO) {
-        pasta.mkdirs()
-        pasta.listFiles()?.forEach { it.delete() }
-        val destino = File(pasta, "Lectio-${versao.versionCode}.apk")
-        http.newCall(Request.Builder().url(versao.apkUrl).build()).execute().use { resp ->
-            if (!resp.isSuccessful) throw IOException("HTTP ${resp.code}")
-            val corpo = resp.body!!
-            val total = corpo.contentLength().toFloat()
-            var lidos = 0L
-            corpo.byteStream().use { entrada ->
-                destino.outputStream().use { saida ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = entrada.read(buffer)
-                        if (n < 0) break
-                        saida.write(buffer, 0, n)
-                        lidos += n
-                        if (total > 0) progresso(lidos / total)
-                    }
-                }
-            }
-        }
-        destino
-    }
-
-    /** O Android pede uma vez a permissão "instalar apps desta fonte" para o próprio app. */
-    fun podeInstalar(): Boolean = app.packageManager.canRequestPackageInstalls()
-
-    fun abrirPermissao(context: Context) {
-        context.startActivity(
-            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${app.packageName}"))
-        )
-    }
-
-    /** Abre o instalador do Android; a pessoa confirma tocando em "Atualizar". */
-    fun instalar(context: Context, apk: File) {
-        val uri = FileProvider.getUriForFile(context, "${app.packageName}.arquivos", apk)
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "application/vnd.android.package-archive")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+    /** O navegador baixa o APK; a pessoa toca no arquivo baixado para instalar. */
+    fun abrirDownload(context: Context, versao: NovaVersao) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(versao.apkUrl)))
     }
 }

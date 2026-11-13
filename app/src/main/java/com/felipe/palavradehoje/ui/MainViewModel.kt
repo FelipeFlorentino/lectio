@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import com.felipe.palavradehoje.data.Atualizador
 import com.felipe.palavradehoje.data.NovaVersao
-import java.io.File
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.felipe.palavradehoje.data.Homilia
@@ -33,59 +32,31 @@ sealed interface Atualizacao {
     data object Verificando : Atualizacao
     data object EmDia : Atualizacao
     data class Disponivel(val versao: NovaVersao) : Atualizacao
-    data class Baixando(val versao: NovaVersao, val progresso: Float) : Atualizacao
-    data class Pronta(val versao: NovaVersao, val apk: File) : Atualizacao
-    data class Erro(val versao: NovaVersao?, val mensagem: String) : Atualizacao
+    data class Erro(val mensagem: String) : Atualizacao
 }
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val repo = Repository(app)
-    private val atualizador = Atualizador(app)
+    private val atualizador = Atualizador()
 
     val atualizacao = MutableStateFlow<Atualizacao>(Atualizacao.Nenhuma)
 
     /** Ao abrir o app, verifica em silêncio; [manual] mostra também "já está em dia" e erros. */
     fun verificarAtualizacao(manual: Boolean = false) {
-        if (atualizacao.value is Atualizacao.Baixando) return
         if (manual) atualizacao.value = Atualizacao.Verificando
         viewModelScope.launch {
             atualizacao.value = try {
                 atualizador.verificar()?.let { Atualizacao.Disponivel(it) }
                     ?: if (manual) Atualizacao.EmDia else Atualizacao.Nenhuma
             } catch (e: Exception) {
-                if (manual) Atualizacao.Erro(null, "Não foi possível verificar. Confira a internet.") else Atualizacao.Nenhuma
+                if (manual) Atualizacao.Erro("Não foi possível verificar. Confira a internet.") else Atualizacao.Nenhuma
             }
         }
     }
 
-    /** Baixa a versão nova (se preciso) e abre o instalador do Android. */
+    /** Abre o download da versão nova no navegador. */
     fun atualizar(context: Context) {
-        when (val estado = atualizacao.value) {
-            is Atualizacao.Disponivel -> baixarEInstalar(context, estado.versao)
-            is Atualizacao.Erro -> estado.versao?.let { baixarEInstalar(context, it) }
-            is Atualizacao.Pronta -> instalar(context, estado.apk)
-            else -> Unit
-        }
-    }
-
-    private fun baixarEInstalar(context: Context, versao: NovaVersao) {
-        atualizacao.value = Atualizacao.Baixando(versao, 0f)
-        viewModelScope.launch {
-            try {
-                val apk = atualizador.baixar(versao) { p -> atualizacao.value = Atualizacao.Baixando(versao, p) }
-                atualizacao.value = Atualizacao.Pronta(versao, apk)
-                instalar(context, apk)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                atualizacao.value = Atualizacao.Erro(versao, "O download falhou. Toque para tentar de novo.")
-            }
-        }
-    }
-
-    private fun instalar(context: Context, apk: File) {
-        // Na primeira vez o Android pede para permitir instalações vindas deste app.
-        if (atualizador.podeInstalar()) atualizador.instalar(context, apk) else atualizador.abrirPermissao(context)
+        (atualizacao.value as? Atualizacao.Disponivel)?.let { atualizador.abrirDownload(context, it.versao) }
     }
 
     private val _data = MutableStateFlow(LocalDate.now())

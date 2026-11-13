@@ -493,7 +493,7 @@ private fun DialogoLembrete(atualizacao: Atualizacao, onVerificar: () -> Unit, o
                     Atualizacao.Verificando -> Text("Verificando…", style = MaterialTheme.typography.bodyMedium)
                     Atualizacao.EmDia -> Text("Você já tem a versão mais recente.", style = MaterialTheme.typography.bodyMedium)
                     is Atualizacao.Erro -> Text(atualizacao.mensagem, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-                    is Atualizacao.Disponivel, is Atualizacao.Baixando, is Atualizacao.Pronta ->
+                    is Atualizacao.Disponivel ->
                         Text("Há uma versão nova: veja o aviso no topo do app.", style = MaterialTheme.typography.bodyMedium)
                     Atualizacao.Nenhuma -> Unit
                 }
