@@ -80,6 +80,8 @@ import com.felipe.palavradehoje.data.Homilia
 import com.felipe.palavradehoje.data.Leitura
 import com.felipe.palavradehoje.data.Liturgia
 import com.felipe.palavradehoje.data.Reflexao
+import com.felipe.palavradehoje.data.Santo
+import androidx.compose.material3.FilterChip
 import com.felipe.palavradehoje.data.Repository
 import com.felipe.palavradehoje.work.Lembrete
 import java.time.LocalDate
@@ -101,6 +103,10 @@ fun TelaPrincipal(vm: MainViewModel) {
     val sequencia by vm.sequencia.collectAsState()
     val atualizando by vm.atualizando.collectAsState()
     val atualizacao by vm.atualizacao.collectAsState()
+    val lendo by vm.lendo.collectAsState()
+    val vozDisponivel by vm.vozDisponivel.collectAsState()
+    val santo by vm.santo.collectAsState()
+    val favoritos by vm.favoritos.collectAsState()
     var aba by rememberSaveable { mutableIntStateOf(0) }
     var mostrarLembrete by remember { mutableStateOf(false) }
     var bannerDispensado by rememberSaveable { mutableStateOf(false) }
@@ -150,9 +156,13 @@ fun TelaPrincipal(vm: MainViewModel) {
                         onGerarNovamente = { vm.carregarManha(novo = true) },
                         onVerLeituras = { aba = 1 },
                     )
-                    1 -> Conteudo(liturgia) { AbaLeituras(it) }
-                    2 -> Conteudo(homilias) { AbaHomilias(it, data) }
-                    else -> Conteudo(reflexao) { AbaReflexao(it, (liturgia as? Estado.Ok)?.valor, data) }
+                    1 -> Conteudo(liturgia) {
+                        AbaLeituras(it, lendo, vozDisponivel, onOuvir = vm::ouvirLeituras, onParar = vm::pararLeitura)
+                    }
+                    2 -> Conteudo(homilias) { AbaHomilias(it, data, favoritos, vm::alternarFavorito) }
+                    else -> Conteudo(reflexao) {
+                        AbaReflexao(it, (liturgia as? Estado.Ok)?.valor, data, santo, vm::conhecerSanto)
+                    }
                 }
             }
         }
@@ -254,12 +264,19 @@ private fun <T> Conteudo(estado: Estado<T>, ok: @Composable (T) -> Unit) {
 // ---------- Leituras ----------
 
 @Composable
-private fun AbaLeituras(liturgia: Liturgia) {
+private fun AbaLeituras(
+    liturgia: Liturgia,
+    lendo: Boolean,
+    vozDisponivel: Boolean,
+    onOuvir: () -> Unit,
+    onParar: () -> Unit,
+) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        item { CartaoOuvir(lendo, vozDisponivel, onOuvir, onParar) }
         items(liturgia.leituras) { CartaoLeitura(it) }
         item {
             Text(
@@ -338,14 +355,48 @@ private fun formatarVersiculos(texto: String, cor: Color): AnnotatedString = bui
 // ---------- Homilias ----------
 
 @Composable
-private fun AbaHomilias(videos: List<Homilia>, data: LocalDate) {
+private fun AbaHomilias(
+    videos: List<Homilia>,
+    data: LocalDate,
+    favoritos: Set<String>,
+    onFavorito: (String) -> Unit,
+) {
     val context = LocalContext.current
+    var soFavoritos by rememberSaveable { mutableStateOf(false) }
+    // Os padres favoritos sobem para o topo; a ordem do YouTube se mantém dentro de cada grupo.
+    val ordenados = videos.sortedByDescending { it.canal in favoritos }
+    val lista = if (soFavoritos) ordenados.filter { it.canal in favoritos } else ordenados
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        items(videos, key = { it.videoId }) { CartaoVideo(it) { abrir(context, it.url) } }
+        item {
+            if (favoritos.isEmpty()) {
+                Text(
+                    "Toque na estrela ao lado do nome de um padre para que as homilias dele apareçam primeiro.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = !soFavoritos, onClick = { soFavoritos = false }, label = { Text("Todos") })
+                    FilterChip(selected = soFavoritos, onClick = { soFavoritos = true }, label = { Text("Só favoritos") })
+                }
+            }
+        }
+        if (soFavoritos && lista.isEmpty()) item {
+            Text(
+                "Nenhum dos seus padres favoritos publicou homilia para este dia ainda.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(lista, key = { it.videoId }) { video ->
+            CartaoVideo(video, favorito = video.canal in favoritos, onFavorito = { onFavorito(video.canal) }) {
+                abrir(context, video.url)
+            }
+        }
         item {
             OutlinedButton(
                 onClick = { abrir(context, Repository.buscaHomiliasUrl(data)) },
@@ -360,7 +411,7 @@ private fun AbaHomilias(videos: List<Homilia>, data: LocalDate) {
 }
 
 @Composable
-private fun CartaoVideo(video: Homilia, onClick: () -> Unit) {
+private fun CartaoVideo(video: Homilia, favorito: Boolean, onFavorito: () -> Unit, onClick: () -> Unit) {
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
@@ -391,11 +442,24 @@ private fun CartaoVideo(video: Homilia, onClick: () -> Unit) {
                 )
             }
         }
-        Column(Modifier.padding(16.dp)) {
-            Text(video.titulo, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.padding(start = 16.dp, end = 4.dp, top = 16.dp, bottom = 8.dp)) {
+            Text(
+                video.titulo,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(end = 12.dp),
+            )
             if (video.canal.isNotEmpty()) {
-                Spacer(Modifier.height(4.dp))
-                Text(video.canal, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        video.canal,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    BotaoFavorito(favorito, onFavorito)
+                }
             }
         }
     }
@@ -404,7 +468,13 @@ private fun CartaoVideo(video: Homilia, onClick: () -> Unit) {
 // ---------- Reflexão ----------
 
 @Composable
-private fun AbaReflexao(reflexao: Reflexao?, liturgia: Liturgia?, data: LocalDate) {
+private fun AbaReflexao(
+    reflexao: Reflexao?,
+    liturgia: Liturgia?,
+    data: LocalDate,
+    santo: Estado<Santo?>,
+    onConhecerSanto: () -> Unit,
+) {
     val context = LocalContext.current
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -441,6 +511,7 @@ private fun AbaReflexao(reflexao: Reflexao?, liturgia: Liturgia?, data: LocalDat
                 }
             }
         }
+        item { CartaoSanto(santo, onConhecerSanto) }
         liturgia?.oracaoDoDia?.let { oracao ->
             item {
                 Card(

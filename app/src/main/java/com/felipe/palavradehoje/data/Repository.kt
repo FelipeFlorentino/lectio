@@ -37,19 +37,50 @@ class Repository(context: Context) {
         return Magisterium.parse(json)
     }
 
+    fun temChave(): Boolean = Magisterium.chave(app) != null
+
+    /** Santo do dia já guardado, sem chamar a API (null se ainda não foi pedido). */
+    fun santoGuardado(data: LocalDate): Santo? =
+        File(cacheDir, "santo-$data.json").takeIf { it.exists() }?.let { runCatching { Magisterium.parseSanto(it.readText()) }.getOrNull() }
+
+    /** Pede ao Magisterium a biografia do santo do dia; só quando a pessoa toca no botão. */
+    suspend fun santo(data: LocalDate): Santo {
+        val chave = Magisterium.chave(app) ?: throw MagisteriumException("Ative a aba Manhã com sua chave do Magisterium para ver o santo do dia.")
+        val celebracao = liturgia(data).celebracao
+        val json = comCache("santo-$data.json", maxIdadeMin = null, forcar = false) {
+            Magisterium.gerarSanto(httpIa, chave, data, celebracao)
+        }
+        return Magisterium.parseSanto(json)
+    }
+
     suspend fun liturgia(data: LocalDate, forcar: Boolean = false): Liturgia {
         val url = "https://liturgia.up.railway.app/v2/?dia=${data.dayOfMonth}&mes=${data.monthValue}&ano=${data.year}"
         val json = comCache("liturgia-$data.json", maxIdadeMin = null, forcar = forcar) { baixar(url) }
         return LiturgiaParser.parse(json)
     }
 
-    suspend fun homilias(data: LocalDate, forcar: Boolean = false): List<Homilia> {
-        val url = buscaHomiliasUrl(data) + "&hl=pt-BR&gl=BR"
+    suspend fun homilias(data: LocalDate, forcar: Boolean = false, favoritos: Set<String> = emptySet()): List<Homilia> {
+        val geral = YoutubeParser.filtrarPorData(buscar(buscaHomiliasUrl(data), "homilias-$data.html", forcar), data).take(20)
+        // A busca geral nem sempre traz os padres favoritos: cada um ganha uma busca própria.
+        val dosFavoritos = favoritos.take(5).flatMap { canal ->
+            val termo = "homilia $canal %02d/%02d/%d".format(data.dayOfMonth, data.monthValue, data.year)
+            val url = "https://www.youtube.com/results?search_query=" + URLEncoder.encode(termo, "UTF-8")
+            val arquivo = "homilias-$data-${Integer.toHexString(canal.hashCode())}.html"
+            val videos = runCatching { buscar(url, arquivo, forcar) }.getOrDefault(emptyList())
+            // Só homilias e comentários do Evangelho: o mesmo canal publica terços, lives etc.
+            YoutubeParser.comData(videos.filter { it.canal == canal }, data)
+                .filter { v -> listOf("homilia", "evangelho", "liturgia", "palavra").any { v.titulo.contains(it, ignoreCase = true) } }
+                .take(2)
+        }
+        val todos = (dosFavoritos + geral).distinctBy { it.videoId }
+        if (todos.isEmpty()) throw IOException("Nenhum vídeo encontrado")
+        return todos
+    }
+
+    private suspend fun buscar(url: String, arquivo: String, forcar: Boolean): List<Homilia> {
         // Novos vídeos saem ao longo do dia, então o cache vale só 2 horas.
-        val html = comCache("homilias-$data.html", maxIdadeMin = 120, forcar = forcar) { baixar(url) }
-        val videos = YoutubeParser.parse(html)
-        if (videos.isEmpty()) throw IOException("Nenhum vídeo encontrado")
-        return YoutubeParser.filtrarPorData(videos, data).take(20)
+        val html = comCache(arquivo, maxIdadeMin = 120, forcar = forcar) { baixar("$url&hl=pt-BR&gl=BR") }
+        return YoutubeParser.parse(html)
     }
 
     suspend fun reflexao(data: LocalDate, forcar: Boolean = false): Reflexao? {

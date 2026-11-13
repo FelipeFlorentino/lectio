@@ -15,6 +15,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.felipe.palavradehoje.MainActivity
 import com.felipe.palavradehoje.R
+import com.felipe.palavradehoje.data.Favoritos
 import com.felipe.palavradehoje.data.Repository
 import java.time.LocalDate
 
@@ -30,7 +31,7 @@ class PalavraWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             return if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
         // Homilias e reflexão são extras: se falharem, o app tenta de novo ao abrir.
-        runCatching { repo.homilias(hoje, forcar = true) }
+        runCatching { repo.homilias(hoje, forcar = true, favoritos = Favoritos.canais(applicationContext)) }
         runCatching { repo.reflexao(hoje, forcar = true) }
         val manha = runCatching { repo.momentoManha(hoje) }.getOrNull()
         repo.limparAntigos()

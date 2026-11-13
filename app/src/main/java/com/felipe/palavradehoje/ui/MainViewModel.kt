@@ -4,6 +4,9 @@ import android.app.Application
 import android.content.Context
 import com.felipe.palavradehoje.data.Atualizador
 import com.felipe.palavradehoje.data.NovaVersao
+import com.felipe.palavradehoje.data.Favoritos
+import com.felipe.palavradehoje.data.Leitor
+import com.felipe.palavradehoje.data.Santo
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.felipe.palavradehoje.data.Homilia
@@ -71,8 +74,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val sequencia = MutableStateFlow(0)
     val atualizando = MutableStateFlow(false)
 
+    /** Ok(null) enquanto a biografia não foi pedida (ela só é gerada quando a pessoa toca no botão). */
+    val santo = MutableStateFlow<Estado<Santo?>>(Estado.Ok(null))
+    val favoritos = MutableStateFlow(Favoritos.canais(app))
+
+    private val leitor = Leitor(app)
+    val lendo = leitor.lendo
+    val vozDisponivel = leitor.disponivel
+
     private var carga: Job? = null
     private var cargaManha: Job? = null
+
+    fun ouvirLeituras() {
+        (liturgia.value as? Estado.Ok)?.let { leitor.ler(it.valor) }
+    }
+
+    fun pararLeitura() = leitor.parar()
+
+    override fun onCleared() {
+        leitor.encerrar()
+    }
+
+    fun conhecerSanto() {
+        val dia = _data.value
+        santo.value = Estado.Carregando
+        viewModelScope.launch {
+            santo.value = try {
+                Estado.Ok(repo.santo(dia))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Estado.Erro(
+                    (e as? MagisteriumException)?.message
+                        ?: "Não foi possível buscar o santo do dia. Verifique a internet e tente de novo."
+                )
+            }
+        }
+    }
+
+    fun alternarFavorito(canal: String) {
+        favoritos.value = Favoritos.alternar(getApplication(), canal)
+        // Busca as homilias do padre recém-marcado sem apagar a lista da tela.
+        val dia = _data.value
+        viewModelScope.launch {
+            runCatching { repo.homilias(dia, favoritos = favoritos.value) }.onSuccess { homilias.value = Estado.Ok(it) }
+        }
+    }
 
     fun salvarChave(chave: String) {
         Magisterium.salvarChave(getApplication(), chave)
@@ -134,6 +181,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         carga?.cancel()
         val dia = _data.value
         atualizarPratica()
+        if (!forcar) {
+            leitor.parar()
+            santo.value = Estado.Ok(repo.santoGuardado(dia))
+        }
         // Atualizar a tela não gera outro roteiro: isso só acontece em "Gerar outra versão".
         if (!forcar || manha.value !is Estado.Ok) carregarManha()
         if (!forcar) {
@@ -145,7 +196,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             atualizando.value = forcar
             listOf(
                 launch { liturgia.value = tentar { repo.liturgia(dia, forcar) } },
-                launch { homilias.value = tentar { repo.homilias(dia, forcar) } },
+                launch { homilias.value = tentar { repo.homilias(dia, forcar, favoritos.value) } },
                 launch { reflexao.value = tentar { repo.reflexao(dia, forcar) } },
             ).joinAll()
             atualizando.value = false

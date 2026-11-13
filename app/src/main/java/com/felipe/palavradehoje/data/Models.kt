@@ -42,6 +42,14 @@ data class MomentoManha(
     data class Ponto(val leitura: String, val referencia: String, val ideia: String)
 }
 
+data class Santo(
+    val nome: String,
+    val titulo: String,
+    val viveu: String,
+    val biografia: String,
+    val licao: String,
+)
+
 data class Reflexao(
     val titulo: String,
     val paragrafos: List<String>,

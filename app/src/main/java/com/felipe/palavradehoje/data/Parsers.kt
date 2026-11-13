@@ -85,7 +85,11 @@ object YoutubeParser {
     }
 
     /** Prefere vídeos cujo título cita a data; se forem poucos, devolve tudo. */
-    fun filtrarPorData(videos: List<Homilia>, data: LocalDate): List<Homilia> {
+    fun filtrarPorData(videos: List<Homilia>, data: LocalDate): List<Homilia> =
+        comData(videos, data).takeIf { it.size >= 3 } ?: videos
+
+    /** Só os vídeos cujo título cita a data (para não trazer homilias antigas de um padre favorito). */
+    fun comData(videos: List<Homilia>, data: LocalDate): List<Homilia> {
         val br = Locale.forLanguageTag("pt-BR")
         val marcas = listOf(
             data.format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
@@ -95,8 +99,7 @@ object YoutubeParser {
             data.format(DateTimeFormatter.ofPattern("d 'de' MMMM", br)),
             data.format(DateTimeFormatter.ofPattern("dd 'de' MMMM", br)),
         ).map { it.lowercase(br) }
-        val comData = videos.filter { v -> marcas.any { v.titulo.lowercase(br).contains(it) } }
-        return if (comData.size >= 3) comData else videos
+        return videos.filter { v -> marcas.any { v.titulo.lowercase(br).contains(it) } }
     }
 }
 

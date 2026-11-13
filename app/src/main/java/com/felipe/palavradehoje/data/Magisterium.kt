@@ -31,11 +31,44 @@ object Magisterium {
     }
 
     /** Chama a API e devolve o JSON do roteiro já limpo (é ele que vai para o cache). */
-    fun gerar(http: OkHttpClient, chave: String, data: LocalDate, liturgia: Liturgia): String {
+    fun gerar(http: OkHttpClient, chave: String, data: LocalDate, liturgia: Liturgia): String =
+        pedir(http, chave, prompt(data, liturgia)).also { parse(it) }
+
+    /** Biografia curta do santo do dia, em JSON limpo para o cache. */
+    fun gerarSanto(http: OkHttpClient, chave: String, data: LocalDate, celebracao: String): String {
+        val dia = data.format(DateTimeFormatter.ofPattern("d 'de' MMMM", BR))
+        val texto = """
+            Hoje é $dia. A celebração litúrgica do dia é: $celebracao.
+            Apresente o santo ou beato celebrado hoje. Se a celebração não for de um santo, escolha o santo mais conhecido lembrado nesta data no Martirológio Romano.
+            Seja fiel e preciso nos dados históricos, simples, em português do Brasil. Não use citações numéricas entre colchetes.
+            Responda SOMENTE com um objeto JSON válido, sem texto antes ou depois, neste formato:
+            {
+             "nome": "nome do santo como é conhecido no Brasil",
+             "titulo": "por exemplo: bispo e mártir",
+             "viveu": "anos de nascimento e morte, por exemplo 1580–1623",
+             "biografia": "quem foi e o que fez, até 80 palavras",
+             "licao": "o que a vida dele ensina para o dia de hoje, uma frase"
+            }
+        """.trimIndent()
+        return pedir(http, chave, texto).also { parseSanto(it) }
+    }
+
+    fun parseSanto(json: String): Santo {
+        val o = JSONObject(json)
+        return Santo(
+            nome = o.getString("nome"),
+            titulo = o.optString("titulo"),
+            viveu = o.optString("viveu"),
+            biografia = o.getString("biografia"),
+            licao = o.optString("licao"),
+        )
+    }
+
+    private fun pedir(http: OkHttpClient, chave: String, texto: String): String {
         val corpo = JSONObject()
             .put("model", "magisterium-1")
             .put("stream", false)
-            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", prompt(data, liturgia))))
+            .put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", texto)))
         val req = Request.Builder()
             .url(URL)
             .header("Authorization", "Bearer $chave")
@@ -50,7 +83,7 @@ object Magisterium {
             val conteudo = JSONObject(resp.body!!.string())
                 .getJSONArray("choices").getJSONObject(0)
                 .getJSONObject("message").getString("content")
-            return extrairJson(conteudo).also { parse(it) }
+            return extrairJson(conteudo)
         }
     }
 
