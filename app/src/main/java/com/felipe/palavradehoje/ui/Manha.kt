@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -36,6 +40,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,6 +99,9 @@ fun AbaManha(
     if (trocarChave) DialogoChave(onFechar = { trocarChave = false }, onSalvar = { trocarChave = false; onSalvarChave(it) })
 }
 
+private val Passos = listOf("Ler", "Meditar", "Viver", "Rezar")
+
+/** O roteiro em quatro passos de deslizar: Ler → Meditar → Viver → Rezar. */
 @Composable
 private fun Roteiro(
     m: MomentoManha,
@@ -103,171 +112,214 @@ private fun Roteiro(
     onGerarNovamente: () -> Unit,
     onTrocarChave: () -> Unit,
 ) {
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        // 1. Tema e resumo
-        item {
-            Column(Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.WbSunny, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("MOMENTO DA MANHÃ · 4 MIN", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+    val pager = rememberPagerState { Passos.size }
+    val scope = rememberCoroutineScope()
+    val destaque = LocalCorDestaque.current
+    fun irPara(p: Int) { scope.launch { pager.animateScrollToPage(p) } }
+
+    Column(Modifier.fillMaxSize()) {
+        // Progresso: um segmento por passo, tocável.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Passos.forEachIndexed { i, nome ->
+                Column(Modifier.weight(1f).clickable { irPara(i) }) {
+                    Box(
+                        Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                            .background(if (i <= pager.currentPage) destaque else MaterialTheme.colorScheme.outlineVariant)
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "${i + 1}. $nome",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (i == pager.currentPage) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        HorizontalPager(pager, Modifier.weight(1f), verticalAlignment = Alignment.Top) { pagina ->
+            Column(
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                when (pagina) {
+                    0 -> PassoLer(m, onVerLeituras)
+                    1 -> PassoMeditar(m)
+                    2 -> PassoViver(m, gestoFeito, sequencia, onMarcarGesto)
+                    else -> PassoRezar(m, onGerarNovamente, onTrocarChave)
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(m.tema, style = MaterialTheme.typography.headlineSmall)
-                if (m.resumo.isNotBlank()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(m.resumo, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
+        // Navegação entre os passos.
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (pager.currentPage > 0) {
+                TextButton(onClick = { irPara(pager.currentPage - 1) }) { Text("Voltar") }
+            }
+            Spacer(Modifier.weight(1f))
+            if (pager.currentPage < Passos.lastIndex) {
+                Button(onClick = { irPara(pager.currentPage + 1) }) { Text("Próximo: ${Passos[pager.currentPage + 1]}") }
+            } else {
+                Text("Amém. Bom dia!", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PassoLer(m: MomentoManha, onVerLeituras: () -> Unit) {
+    Column(Modifier.padding(horizontal = 4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.WbSunny, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("MOMENTO DA MANHÃ · 4 MIN", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(m.tema, style = MaterialTheme.typography.headlineSmall)
+        if (m.resumo.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(m.resumo, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+    Bloco(titulo = "A PALAVRA DE HOJE") {
+        m.pontos.forEachIndexed { i, p ->
+            if (i > 0) Spacer(Modifier.height(14.dp))
+            Row {
+                Box(
+                    Modifier.padding(top = 2.dp).size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+                Spacer(Modifier.width(12.dp))
+                Column {
+                    Text("${p.leitura} · ${p.referencia}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.height(2.dp))
+                    Text(p.ideia, style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = onVerLeituras, contentPadding = PaddingValues(0.dp)) { Text("Ler as leituras completas") }
+    }
+}
 
-        // 2. A Palavra em poucas linhas
-        item {
-            Bloco(titulo = "A PALAVRA DE HOJE") {
-                m.pontos.forEachIndexed { i, p ->
-                    if (i > 0) Spacer(Modifier.height(14.dp))
-                    Row {
-                        Box(
-                            Modifier.padding(top = 2.dp).size(24.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text("${i + 1}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text(
-                                "${p.leitura} · ${p.referencia}",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                            Spacer(Modifier.height(2.dp))
-                            Text(p.ideia, style = MaterialTheme.typography.bodyMedium.copy(fontSize = 16.sp, lineHeight = 23.sp))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                TextButton(onClick = onVerLeituras, contentPadding = PaddingValues(0.dp)) { Text("Ler as leituras completas") }
-            }
-        }
-
-        // 3. Versículo para levar
-        if (m.versiculo.isNotBlank()) item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "PARA REPETIR DURANTE O DIA",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "“${m.versiculo.trim('“', '”', '"')}”",
-                        style = MaterialTheme.typography.titleLarge.copy(fontStyle = FontStyle.Italic),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        textAlign = TextAlign.Center,
-                    )
-                    if (m.versiculoRef.isNotBlank()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(m.versiculoRef, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f))
-                    }
-                }
-            }
-        }
-
-        // 4. Meditar
-        if (m.pergunta.isNotBlank()) item {
-            Bloco(titulo = "PARA MEDITAR") {
-                Text(m.pergunta, style = MaterialTheme.typography.bodyLarge)
-            }
-        }
-
-        // 5. Viver: o gesto do dia e o registro da prática
-        if (m.gesto.isNotBlank()) item {
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(20.dp)) {
-                    Text("PARA VIVER HOJE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                    Spacer(Modifier.height(8.dp))
-                    Text(m.gesto, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    Spacer(Modifier.height(14.dp))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (gestoFeito) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceContainerLow)
-                            .clickable { onMarcarGesto(!gestoFeito) }
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            Modifier.size(24.dp).clip(CircleShape)
-                                .background(if (gestoFeito) Color.White else MaterialTheme.colorScheme.secondaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (gestoFeito) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            if (gestoFeito) "Vivi isso hoje" else "Marcar quando viver este gesto",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (gestoFeito) Color.White else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    if (sequencia >= 2) {
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            "$sequencia dias seguidos levando a Palavra para a vida",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
-                }
-            }
-        }
-
-        // 6. Rezar
-        if (m.oracao.isNotBlank()) item {
-            Bloco(titulo = "ORAÇÃO") {
-                Text(m.oracao, style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic))
-            }
-        }
-
-        // 7. Santo do dia, em uma linha
-        m.santo?.let { santo ->
-            item {
+@Composable
+private fun PassoMeditar(m: MomentoManha) {
+    if (m.versiculo.isNotBlank()) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(horizontal = 24.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    santo,
+                    "PARA REPETIR DURANTE O DIA",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f),
+                )
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    "“${m.versiculo.trim('“', '”', '"')}”",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    textAlign = TextAlign.Center,
+                )
+                if (m.versiculoRef.isNotBlank()) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(m.versiculoRef, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f))
+                }
+            }
+        }
+    }
+    if (m.pergunta.isNotBlank()) {
+        Bloco(titulo = "PARA MEDITAR") {
+            Text(m.pergunta, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Fique um minuto em silêncio com esta pergunta.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PassoViver(m: MomentoManha, gestoFeito: Boolean, sequencia: Int, onMarcarGesto: (Boolean) -> Unit) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(20.dp)) {
+            Text("PARA VIVER HOJE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            Spacer(Modifier.height(8.dp))
+            Text(m.gesto, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Spacer(Modifier.height(14.dp))
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (gestoFeito) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surfaceContainerLow)
+                    .clickable { onMarcarGesto(!gestoFeito) }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(24.dp).clip(CircleShape)
+                        .background(if (gestoFeito) Color.White else MaterialTheme.colorScheme.secondaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (gestoFeito) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    if (gestoFeito) "Vivi isso hoje" else "Marcar quando viver este gesto",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (gestoFeito) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (sequencia >= 2) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "$sequencia dias seguidos levando a Palavra para a vida",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
+                    color = MaterialTheme.colorScheme.secondary,
                 )
             }
         }
+    }
+    Text(
+        "Volte aqui à noite para marcar o gesto como vivido.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    )
+}
 
-        item {
-            Column(Modifier.padding(top = 4.dp, bottom = 24.dp)) {
-                Text(
-                    "Preparado pelo Magisterium AI a partir das leituras do dia.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-                Row {
-                    TextButton(onClick = onGerarNovamente) { Text("Gerar outra versão") }
-                    TextButton(onClick = onTrocarChave) { Text("Trocar chave") }
-                }
-            }
+@Composable
+private fun PassoRezar(m: MomentoManha, onGerarNovamente: () -> Unit, onTrocarChave: () -> Unit) {
+    if (m.oracao.isNotBlank()) {
+        Bloco(titulo = "ORAÇÃO") {
+            Text(m.oracao, style = MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic))
+        }
+    }
+    m.santo?.let { santo ->
+        Bloco(titulo = "COM O SANTO DO DIA") {
+            Text(santo, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+    Column(Modifier.padding(top = 4.dp)) {
+        Text(
+            "Preparado pelo Magisterium AI a partir das leituras do dia.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+        Row {
+            TextButton(onClick = onGerarNovamente) { Text("Gerar outra versão") }
+            TextButton(onClick = onTrocarChave) { Text("Trocar chave") }
         }
     }
 }

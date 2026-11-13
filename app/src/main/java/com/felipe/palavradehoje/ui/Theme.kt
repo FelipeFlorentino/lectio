@@ -6,6 +6,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -52,7 +53,8 @@ private val Escuro = darkColorScheme(
 
 private val Serif = FontFamily.Serif
 
-private val Tipografia = Typography(
+/** Tipografia base, sem a escala de leitura (o cabeçalho usa esta para não crescer). */
+internal val Tipografia = Typography(
     headlineSmall = TextStyle(fontFamily = Serif, fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
     titleLarge = TextStyle(fontFamily = Serif, fontWeight = FontWeight.SemiBold, fontSize = 21.sp, lineHeight = 28.sp),
     titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp),
@@ -62,13 +64,31 @@ private val Tipografia = Typography(
     labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.6.sp),
 )
 
+/** Cor de destaque do tempo litúrgico (faixa do topo, abas, progresso da Manhã). */
+val LocalCorDestaque = staticCompositionLocalOf { Color(0xFF7A2E2E) }
+
+/**
+ * [escala] aumenta ou diminui só os textos de leitura (leituras, roteiro, reflexão),
+ * sem mexer nos botões e rótulos.
+ */
 @Composable
-fun PalavraTheme(content: @Composable () -> Unit) {
+fun PalavraTheme(escala: Float = 1f, content: @Composable () -> Unit) {
+    val tipografia = Tipografia.copy(
+        bodyLarge = Tipografia.bodyLarge.copy(fontSize = 18.sp * escala, lineHeight = 29.sp * escala),
+        titleLarge = Tipografia.titleLarge.copy(fontSize = 21.sp * escala, lineHeight = 28.sp * escala),
+        headlineSmall = Tipografia.headlineSmall.copy(fontSize = 24.sp * escala, lineHeight = 30.sp * escala),
+    )
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) Escuro else Claro,
-        typography = Tipografia,
+        typography = tipografia,
         content = content,
     )
+}
+
+/** Versão da cor litúrgica que aparece sobre o fundo claro: o branco vira dourado. */
+fun corDestaque(nome: String): Color = when (nome.lowercase().trim()) {
+    "branco", "" -> Color(0xFFC9A227)
+    else -> corLiturgica(nome)
 }
 
 /** Cor litúrgica do dia, para o marcador do cabeçalho. */

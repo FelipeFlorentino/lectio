@@ -7,6 +7,7 @@ import com.felipe.palavradehoje.data.NovaVersao
 import com.felipe.palavradehoje.data.Favoritos
 import com.felipe.palavradehoje.data.Leitor
 import com.felipe.palavradehoje.data.Santo
+import com.felipe.palavradehoje.data.TamanhoTexto
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.felipe.palavradehoje.data.Homilia
@@ -77,6 +78,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Ok(null) enquanto a biografia não foi pedida (ela só é gerada quando a pessoa toca no botão). */
     val santo = MutableStateFlow<Estado<Santo?>>(Estado.Ok(null))
     val favoritos = MutableStateFlow(Favoritos.canais(app))
+    val escalaTexto = MutableStateFlow(TamanhoTexto.atual(app))
+
+    fun mudarTamanhoTexto(passo: Int) {
+        escalaTexto.value = TamanhoTexto.mudar(getApplication(), passo)
+    }
 
     private val leitor = Leitor(app)
     val lendo = leitor.lendo

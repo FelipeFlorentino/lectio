@@ -82,6 +82,11 @@ import com.felipe.palavradehoje.data.Liturgia
 import com.felipe.palavradehoje.data.Reflexao
 import com.felipe.palavradehoje.data.Santo
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.Dp
 import com.felipe.palavradehoje.data.Repository
 import com.felipe.palavradehoje.work.Lembrete
 import java.time.LocalDate
@@ -110,8 +115,11 @@ fun TelaPrincipal(vm: MainViewModel) {
     var aba by rememberSaveable { mutableIntStateOf(0) }
     var mostrarLembrete by remember { mutableStateOf(false) }
     var bannerDispensado by rememberSaveable { mutableStateOf(false) }
+    val escala by vm.escalaTexto.collectAsState()
     val context = LocalContext.current
+    val destaque = (liturgia as? Estado.Ok)?.valor?.let { corDestaque(it.cor) } ?: MaterialTheme.colorScheme.primary
 
+    CompositionLocalProvider(LocalCorDestaque provides destaque) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -122,6 +130,8 @@ fun TelaPrincipal(vm: MainViewModel) {
                 onProximo = { vm.mudarDia(1) },
                 onHoje = vm::irParaHoje,
                 onLembrete = { mostrarLembrete = true },
+                escala = escala,
+                onMudarTexto = vm::mudarTamanhoTexto,
             )
         },
     ) { padding ->
@@ -136,6 +146,13 @@ fun TelaPrincipal(vm: MainViewModel) {
             PrimaryTabRow(
                 selectedTabIndex = aba,
                 containerColor = MaterialTheme.colorScheme.background,
+                indicator = {
+                    TabRowDefaults.PrimaryIndicator(
+                        Modifier.tabIndicatorOffset(aba, matchContentSize = true),
+                        width = Dp.Unspecified,
+                        color = destaque,
+                    )
+                },
             ) {
                 listOf("Manhã", "Leituras", "Homilias", "Reflexão").forEachIndexed { i, nome ->
                     Tab(selected = aba == i, onClick = { aba = i }, text = { Text(nome) })
@@ -167,6 +184,7 @@ fun TelaPrincipal(vm: MainViewModel) {
             }
         }
     }
+    }
 
     if (mostrarLembrete) {
         DialogoLembrete(
@@ -186,11 +204,17 @@ private fun Cabecalho(
     onProximo: () -> Unit,
     onHoje: () -> Unit,
     onLembrete: () -> Unit,
+    escala: Float,
+    onMudarTexto: (Int) -> Unit,
 ) {
     val hoje = data == LocalDate.now()
+    val destaque = LocalCorDestaque.current
+    var menuTexto by remember { mutableStateOf(false) }
     Surface(color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.fillMaxWidth().statusBarsPadding()) {
+            // Faixa na cor do tempo litúrgico: verde, roxo, vermelho, dourado (branco)...
+            Box(Modifier.fillMaxWidth().height(5.dp).background(destaque))
+            Row(Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onAnterior) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Dia anterior")
                 }
@@ -199,14 +223,14 @@ private fun Cabecalho(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        if (hoje) "HOJE" else "TOQUE PARA VOLTAR A HOJE",
+                        data.format(DateTimeFormatter.ofPattern("EEEE", BR)).uppercase(BR) +
+                            if (hoje) " · HOJE" else " · VOLTAR A HOJE",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        data.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", BR))
-                            .replaceFirstChar { it.titlecase(BR) },
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 19.sp),
+                        data.format(DateTimeFormatter.ofPattern("d 'de' MMMM", BR)),
+                        style = Tipografia.titleLarge.copy(fontSize = 22.sp),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -214,13 +238,33 @@ private fun Cabecalho(
                 IconButton(onClick = onProximo) {
                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Próximo dia")
                 }
+                Box {
+                    IconButton(onClick = { menuTexto = true }) {
+                        Icon(Icons.Filled.FormatSize, contentDescription = "Tamanho da letra")
+                    }
+                    DropdownMenu(expanded = menuTexto, onDismissRequest = { menuTexto = false }) {
+                        Text(
+                            "Tamanho da letra",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                        Row(
+                            Modifier.padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(onClick = { onMudarTexto(-1) }) { Text("A−", fontSize = 16.sp) }
+                            Text("${(escala * 100).toInt()}%", style = MaterialTheme.typography.labelLarge)
+                            TextButton(onClick = { onMudarTexto(1) }) { Text("A+", fontSize = 22.sp) }
+                        }
+                    }
+                }
                 IconButton(onClick = onLembrete) {
                     Icon(Icons.Filled.NotificationsActive, contentDescription = "Lembrete diário")
                 }
             }
             if (liturgia != null && liturgia.celebracao.isNotEmpty()) {
                 Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

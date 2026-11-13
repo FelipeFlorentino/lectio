@@ -31,11 +31,12 @@ $texto = $texto -replace 'versionName = "[^"]*"', "versionName = `"$Versao`""
 Write-Host "Versão $Versao (código $codigo)"
 
 # 2. Compilação
-& .\gradlew.bat assembleRelease --console=plain -q
+# A compilação acontece fora do OneDrive (veja gradlew-local.bat e build.gradle.kts).
+& .\gradlew-local.bat assembleRelease --console=plain -q
 if ($LASTEXITCODE -ne 0) { throw 'A compilação falhou.' }
 New-Item -ItemType Directory -Force dist | Out-Null
 $apk = "dist\Lectio-$codigo.apk"
-Copy-Item 'app\build\outputs\apk\release\app-release.apk' $apk -Force
+Copy-Item (Join-Path $env:LOCALAPPDATA 'Lectio-build\app\outputs\apk\release\app-release.apk') $apk -Force
 Copy-Item $apk 'Lectio.apk' -Force
 
 # 3. Código no GitHub

@@ -8,6 +8,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import com.felipe.palavradehoje.ui.MainViewModel
 import com.felipe.palavradehoje.ui.PalavraTheme
 import com.felipe.palavradehoje.ui.TelaPrincipal
@@ -24,7 +26,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT >= 33) pedirNotificacao.launch(Manifest.permission.POST_NOTIFICATIONS)
         setContent {
-            PalavraTheme { TelaPrincipal(vm) }
+            val escala by vm.escalaTexto.collectAsState()
+            PalavraTheme(escala) { TelaPrincipal(vm) }
         }
     }
 

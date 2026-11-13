@@ -20,8 +20,8 @@ android {
         applicationId = "com.felipe.lectio"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3"
+        versionCode = 6
+        versionName = "1.4"
         // Repositório no GitHub onde as versões novas são publicadas.
         buildConfigField("String", "REPO_ATUALIZACAO", "\"${property("atualizacao.repo")}\"")
     }
