@@ -1,4 +1,4 @@
-# Publica uma versão nova do app no GitHub. Os celulares veem o aviso "Nova versão" ao abrir o app.
+﻿# Publica uma versão nova do app no GitHub. Os celulares veem o aviso "Nova versão" ao abrir o app.
 #
 # Uso:  .\publicar.ps1 -Versao 1.2 -Notas "O que mudou nesta versão"
 #
@@ -7,7 +7,9 @@
 
 param(
     [Parameter(Mandatory = $true)][string]$Versao,
-    [Parameter(Mandatory = $true)][string]$Notas
+    [Parameter(Mandatory = $true)][string]$Notas,
+    # Linha extra opcional no fim do commit (ex.: "Co-Authored-By: ...").
+    [string]$Rodape = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,7 +40,9 @@ Copy-Item $apk 'Lectio.apk' -Force
 
 # 3. Código no GitHub
 git add -A
-git commit -q -m "Versão $Versao" -m $Notas
+$mensagem = @('-m', "Versão $Versao", '-m', $Notas)
+if ($Rodape) { $mensagem += @('-m', $Rodape) }
+git commit -q @mensagem
 git push -q
 if ($LASTEXITCODE -ne 0) { throw 'O push para o GitHub falhou.' }
 
